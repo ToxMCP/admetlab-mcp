@@ -1,0 +1,53 @@
+name: Feature Request
+description: Suggest a new capability or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the use case first, then the proposed implementation.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line description of the request
+      placeholder: Add tool for ADMET batch status polling
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What are you trying to accomplish?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: API/tooling behavior you want to see
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you evaluated
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example Payloads or API Shape (Optional)
+      render: json
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for related requests.
+          required: true

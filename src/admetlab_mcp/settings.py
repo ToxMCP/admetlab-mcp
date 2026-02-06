@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import AnyHttpUrl, Field, PositiveInt
+from pydantic import AnyHttpUrl, Field, PositiveInt, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +49,46 @@ class Settings(BaseSettings):
         default=None, description="Optional API key header (reserved for future use)"
     )
     log_level: str = Field(default="INFO", description="Application log level")
+
+    @field_validator("admet_endpoint", mode="after")
+    @classmethod
+    def _normalize_admet_endpoint(cls, value: str) -> str:
+        endpoint = value.strip()
+        if not endpoint:
+            raise ValueError("ADMET endpoint cannot be empty")
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+        return endpoint
+
+    @field_validator("admet_fallback_endpoints", mode="before")
+    @classmethod
+    def _parse_fallback_endpoints(cls, value: object) -> list[str]:
+        if value is None:
+            return ["/api/single/admet"]
+
+        raw_endpoints: list[str]
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                loaded = json.loads(text)
+                if not isinstance(loaded, list):
+                    raise ValueError("Fallback endpoints JSON must be a list")
+                raw_endpoints = [str(item) for item in loaded]
+            else:
+                raw_endpoints = [item.strip() for item in text.split(",")]
+        elif isinstance(value, (list, tuple, set)):
+            raw_endpoints = [str(item).strip() for item in value]
+        else:
+            raise ValueError("Fallback endpoints must be a string or a list")
+
+        normalized: list[str] = []
+        for endpoint in raw_endpoints:
+            if not endpoint:
+                continue
+            normalized.append(endpoint if endpoint.startswith("/") else f"/{endpoint}")
+        return normalized
 
 
 @lru_cache

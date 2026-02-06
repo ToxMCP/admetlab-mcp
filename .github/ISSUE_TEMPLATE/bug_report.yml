@@ -1,0 +1,73 @@
+name: Bug Report
+description: Report a reproducible defect or regression
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report. Please provide enough detail to reproduce and diagnose quickly.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line description of the bug
+      placeholder: tools/call returns invalid params for valid SMILES payload
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction Steps
+      description: Exact steps or request payload used
+      placeholder: |
+        1. Start server with uvicorn ...
+        2. Send JSON-RPC payload ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / Commit
+      description: release version or git SHA
+      placeholder: v0.1.0 or 1a2b3c4
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and deployment details
+      placeholder: macOS 15, Python 3.11, local uvicorn
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Traceback (Optional)
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I verified this is not a security vulnerability disclosure.
+          required: true
+        - label: I searched existing issues for duplicates.
+          required: true

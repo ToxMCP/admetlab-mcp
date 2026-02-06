@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ADMETlab_MCP"
+name = "admetlab-mcp"
 version = "0.1.0"
 description = "Model Context Protocol server for ADMETlab 3.0"
 readme = "README.md"
@@ -12,14 +12,24 @@ license = {text = "MIT"}
 authors = [
   {name = "ADMETlab MCP Team"}
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Framework :: FastAPI",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
 dependencies = [
   "fastapi>=0.111,<1.0",
   "uvicorn[standard]>=0.29,<0.31",
-  "websockets>=11,<13",
   "httpx>=0.27,<1.0",
   "pydantic>=2.7,<3.0",
   "pydantic-settings>=2.3,<3.0",
-  "jsonschema>=4.21,<5.0",
 ]
 
 [project.optional-dependencies]
@@ -33,11 +43,14 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/example/ADMETlab_MCP"
+Homepage = "https://github.com/senseibelbi/ADMETlab_MCP"
+Repository = "https://github.com/senseibelbi/ADMETlab_MCP"
+Issues = "https://github.com/senseibelbi/ADMETlab_MCP/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 include-package-data = true
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

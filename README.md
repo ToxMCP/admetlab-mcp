@@ -1,4 +1,4 @@
-# ADMETlab_MCP (ADMETlab 3.0 MCP Server)
+# ADMETlab MCP (ADMETlab 3.0 MCP Server)
 
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
@@ -26,7 +26,7 @@ ADMETlab 3.0 provides ADMET property calculations, washing, and visualization. R
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 cp .env.example .env
 uvicorn admetlab_mcp.transport.http:app --host 0.0.0.0 --port 8200 --reload
 ```
@@ -53,7 +53,7 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | `ADMETLAB_FEATURE_DEFAULT` | `false` | Default `feature` flag for ADMET. |
 | `ADMETLAB_UNCERTAIN_DEFAULT` | `false` | Default `uncertain` flag for ADMET. |
 | `ADMETLAB_ADMET_ENDPOINT` | `/api/admet` | Primary ADMET endpoint. |
-| `ADMETLAB_ADMET_FALLBACK_ENDPOINTS` | `/api/single/admet` | Comma-separated fallback endpoints. |
+| `ADMETLAB_ADMET_FALLBACK_ENDPOINTS` | `/api/single/admet` | Fallback endpoints. Accepts comma-separated paths or JSON array string. |
 | `ADMETLAB_API_KEY` | _empty_ | Reserved for future auth. |
 | `ADMETLAB_LOG_LEVEL` | `INFO` | Log level. |
 
@@ -101,7 +101,7 @@ curl -s http://localhost:8200/mcp \
 
 ## Output artifacts
 
-- Tool results are returned as `structuredContent` via MCP JSON-RPC responses.
+- Tool results are returned as JSON under `result.content` in MCP JSON-RPC responses.
 - CSV fetch includes raw text plus headers for client-side saving.
 - SVGs are returned inline as strings from `render_molecule_svg`.
 
@@ -118,6 +118,23 @@ curl -s http://localhost:8200/mcp \
 
 ## Development notes
 
-- Tests: `pytest` (current suite covers health/tools list; extend with fixtures when upstream stabilizes).
+- Tests: `pytest`
 - Lint/format: `black . && isort .`
 - Known upstream issues: ADMET endpoints may return 404/500 due to service instability (per official notice). The client retries and falls back but cannot guarantee success.
+
+---
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup and pull request guidance.
+
+## Community and governance
+
+- Code of Conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- Security policy: [`SECURITY.md`](SECURITY.md)
+- Release checklist: [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).

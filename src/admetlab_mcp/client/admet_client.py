@@ -92,11 +92,7 @@ class AdmetClient:
                 seen[path] = f"{exc.response.status_code} {exc.response.reason_phrase}"
             except httpx.TimeoutException as exc:
                 seen[path] = f"timeout: {exc}"
-        raise httpx.HTTPStatusError(
-            f"All ADMET endpoints failed: {seen}",
-            request=None,
-            response=None,
-        )
+        raise httpx.HTTPError(f"All ADMET endpoints failed: {seen}")
 
     async def fetch_admet_csv(self, task_id: str) -> httpx.Response:
         payload = {"taskId": task_id}
