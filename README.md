@@ -198,3 +198,17 @@ Djidrovski, I. **ToxMCP: Guardrailed, Auditable Agentic Workflows for Computatio
 
 Citation metadata: [`CITATION.cff`](./CITATION.cff)
 
+
+## Verification (smoke test)
+
+Once the server is running:
+
+```bash
+# health
+curl -s http://localhost:8200/health | jq .
+
+# list MCP tools
+curl -s http://localhost:8200/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | jq .
+```
