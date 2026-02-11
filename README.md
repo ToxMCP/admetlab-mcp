@@ -1,5 +1,8 @@
 # ADMETlab MCP (ADMETlab 3.0 MCP Server)
 
+> Part of **ToxMCP** Suite → https://github.com/ToxMCP/toxmcp
+
+
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
 
