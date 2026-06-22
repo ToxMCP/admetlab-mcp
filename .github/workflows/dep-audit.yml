@@ -1,0 +1,67 @@
+name: dep-audit
+
+# Advisory dependency-vulnerability gate.
+#
+# Runs pip-audit in FAIL-ON-ANY mode over the project's full, pinned dependency
+# set (runtime + dev). The weekly schedule matters: pip-audit queries a LIVE
+# advisory database, so a main branch that is green today can go red tomorrow
+# when a new CVE lands on an already-pinned dependency. The scheduled run catches
+# those without any code change.
+#
+# This org is on GitHub Free, so on private repos this is a visible signal
+# (a red check) rather than a hard, enforced merge block; the intent is the same.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 04:17 UTC (off-peak). Re-audits pinned deps against the
+    # live advisory DB so a stale-but-green main is surfaced.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies (runtime + dev, frozen to uv.lock)
+        run: uv sync --extra dev --frozen
+
+      # Export the fully resolved, pinned, hashed dependency set (runtime + dev)
+      # WITHOUT the local editable project. pip-audit's --strict cannot audit an
+      # editable first-party package (admetlab-mcp is not on PyPI), so we audit
+      # the locked third-party set directly instead. This audits exactly what
+      # uv.lock pins.
+      - name: Export locked dependency set
+        run: |
+          uv export --frozen --extra dev --no-emit-project \
+            --format requirements-txt > /tmp/dep-audit-requirements.txt
+          echo "Audited dependency set:"
+          grep -E '^[A-Za-z0-9._-]+==' /tmp/dep-audit-requirements.txt | sort
+
+      # FAIL-ON-ANY: pip-audit exits non-zero on ANY advisory regardless of
+      # severity. --strict additionally fails the run if dependency collection
+      # itself errors. No severity filter, no '|| true' — that is the whole point.
+      - name: Run pip-audit (fail on any advisory)
+        run: |
+          uvx pip-audit \
+            --requirement /tmp/dep-audit-requirements.txt \
+            --strict \
+            --desc
