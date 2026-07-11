@@ -25,7 +25,7 @@ isort .
 
 ## Reporting issues
 
-Use [GitHub Issues](https://github.com/senseibelbi/ADMETlab_MCP/issues) with:
+Use [GitHub Issues](https://github.com/ToxMCP/admetlab-mcp/issues) with:
 - clear reproduction steps,
 - expected vs actual behavior,
 - logs or payloads when relevant.
