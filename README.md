@@ -172,7 +172,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup and pull request 
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
+
 ## Acknowledgements / Origins
 
 ToxMCP was developed in the context of the **VHP4Safety** project (see: https://github.com/VHP4Safety) and related research/engineering efforts.
