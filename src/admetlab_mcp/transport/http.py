@@ -7,14 +7,14 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
+from .. import __version__
 from ..client.admet_client import AdmetClient
 from ..logging import configure_logging, correlation_id
 from ..settings import get_settings
 
-
-app = FastAPI(title="ADMETlab 3.0 MCP Server", version="0.1.0")
+app = FastAPI(title="ADMETlab 3.0 MCP Server", version=__version__)
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +51,9 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
             "description": "Standardize molecules via /api/washmol. Input SMILES string or list.",
             "inputSchema": {
                 "type": "object",
-                "properties": {"SMILES": {"type": ["string", "array"], "items": {"type": "string"}}},
+                "properties": {
+                    "SMILES": {"type": ["string", "array"], "items": {"type": "string"}}
+                },
                 "required": ["SMILES"],
             },
         },
@@ -62,7 +64,12 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "SMILES": {"type": "string"},
-                    "figsize": {"type": "array", "items": {"type": "integer"}, "maxItems": 2, "minItems": 2},
+                    "figsize": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "maxItems": 2,
+                        "minItems": 2,
+                    },
                 },
                 "required": ["SMILES"],
             },
@@ -73,7 +80,10 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "SMILES": {"type": ["array", "string"], "items": {"type": "string"}},
+                    "SMILES": {
+                        "type": ["array", "string"],
+                        "items": {"type": "string"},
+                    },
                     "feature": {"type": "boolean"},
                     "uncertain": {"type": "boolean"},
                 },
@@ -100,7 +110,7 @@ async def _handle_initialize(_params: Dict[str, Any]) -> Dict[str, Any]:
     settings = get_settings()
     return {
         "protocolVersion": "2024-11-05",
-        "capabilities": {"tools": True},
+        "capabilities": {"tools": {}},
         "serverInfo": {"name": "admetlab-mcp", "version": app.version},
         "metadata": {
             "rpsLimit": settings.rps_limit,
@@ -158,7 +168,9 @@ def _coerce_smiles(smiles_arg: Any) -> List[str]:
         if value:
             normalized.append(value)
     if not normalized:
-        raise RpcError(-32602, "Invalid params: at least one non-empty SMILES is required")
+        raise RpcError(
+            -32602, "Invalid params: at least one non-empty SMILES is required"
+        )
     return normalized
 
 
@@ -179,7 +191,9 @@ async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
                 if not isinstance(smiles, str) or not smiles.strip():
                     raise RpcError(-32602, "Invalid params: SMILES is required")
                 figsize = arguments.get("figsize")
-                return await client.render_molecule_svg(smiles=smiles.strip(), figsize=figsize)
+                return await client.render_molecule_svg(
+                    smiles=smiles.strip(), figsize=figsize
+                )
 
             if name == "predict_admet":
                 smiles_arg = arguments.get("SMILES", arguments.get("smiles"))
@@ -225,7 +239,15 @@ async def _handle_tools_call(params: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(arguments, dict):
         raise RpcError(-32602, "Invalid params: arguments must be an object")
     result = await _call_tool(name=name, arguments=arguments)
-    return {"content": result}
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(result, ensure_ascii=False, sort_keys=True),
+            }
+        ],
+        "structuredContent": result,
+    }
 
 
 async def _handle_initialized() -> Dict[str, str]:
@@ -239,7 +261,7 @@ async def _handle_shutdown() -> Dict[str, str]:
 async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
     if method == "initialize":
         return await _handle_initialize(params)
-    if method == "initialized":
+    if method in {"notifications/initialized", "initialized"}:
         return await _handle_initialized()
     if method == "shutdown":
         return await _handle_shutdown()
@@ -253,7 +275,7 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: Request) -> JSONResponse:
+async def mcp_endpoint(request: Request) -> Response:
     try:
         payload = await request.json()
     except json.JSONDecodeError:
@@ -268,6 +290,7 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    is_notification = "id" not in payload
     rpc_id = payload.get("id")
     method = payload.get("method")
     params = payload.get("params", {})
@@ -281,8 +304,12 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
             raise RpcError(-32602, "Invalid params: params must be an object")
 
         result = await _dispatch(method, params)
+        if is_notification:
+            return Response(status_code=202)
         return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "result": result})
     except RpcError as exc:
+        if is_notification:
+            return Response(status_code=400)
         return JSONResponse(
             _rpc_error_payload(
                 rpc_id=rpc_id,

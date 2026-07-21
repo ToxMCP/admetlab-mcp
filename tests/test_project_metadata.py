@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from admetlab_mcp import __version__
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10
@@ -37,3 +39,9 @@ def test_project_urls_point_to_current_repository() -> None:
     }
     assert f"{REPOSITORY_URL}/issues" in contributing
     assert "senseibelbi/ADMETlab_MCP" not in contributing
+
+
+def test_project_version_matches_runtime_version() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+
+    assert project["version"] == __version__ == "0.1.1"
