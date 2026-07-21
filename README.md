@@ -17,6 +17,14 @@
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
 
+## What's new in v0.1.1
+
+This patch release restores standards-compliant initialization for strict MCP clients, including Claude Desktop through `mcp-remote`.
+
+- `capabilities.tools` is now advertised as an object.
+- The HTTP transport accepts `notifications/initialized` and responds to notifications with `202 Accepted` and no body.
+- Successful tool calls return standard MCP content blocks plus matching `structuredContent`.
+
 ## Why this project exists
 
 ADMETlab 3.0 provides ADMET property calculations, washing, and visualization. Researchers often script against the API or copy/paste results; MCP packaging makes these workflows discoverable and callable by LLM copilots with guardrails and structured schemas.
@@ -103,7 +111,7 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | `predict_admet` | `POST /api/admet` (fallback `/api/single/admet`) | ADMET panel with decision codes, probabilities, SVG highlights; returns batch aggregation and `taskid` from upstream payload. |
 | `fetch_admet_csv` | `POST /api/admetCSV` | Fetch CSV results by `taskId`; response includes headers and content. |
 
-Lifecycle: `initialize`, `initialized`, `shutdown`, `exit` exposed via `/mcp`. Tool schemas are discoverable via `tools/list`.
+Lifecycle: `initialize`, `notifications/initialized`, `shutdown`, and `exit` are exposed via `/mcp`. Tool schemas are discoverable via `tools/list`.
 
 ---
 
@@ -119,7 +127,7 @@ Sample MCP calls (HTTP):
 # initialize
 curl -s http://localhost:8200/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-smoke","version":"1.0"}}}'
 
 # list tools
 curl -s http://localhost:8200/mcp \
@@ -136,7 +144,7 @@ curl -s http://localhost:8200/mcp \
 
 ## Output artifacts
 
-- Tool results are returned as JSON under `result.content` in MCP JSON-RPC responses.
+- Tool results are returned as text content blocks under `result.content` and as machine-readable JSON under `result.structuredContent`.
 - CSV fetch includes raw text plus headers for client-side saving.
 - SVGs are returned inline as strings from `render_molecule_svg`.
 
