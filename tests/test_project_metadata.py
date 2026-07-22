@@ -44,4 +44,4 @@ def test_project_urls_point_to_current_repository() -> None:
 def test_project_version_matches_runtime_version() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
 
-    assert project["version"] == __version__ == "0.1.1"
+    assert project["version"] == __version__ == "0.1.2"

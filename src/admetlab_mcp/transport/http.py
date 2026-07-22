@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-import math
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -16,6 +16,22 @@ from ..settings import get_settings
 
 app = FastAPI(title="ADMETlab 3.0 MCP Server", version=__version__)
 logger = logging.getLogger(__name__)
+
+ADMETLAB_SOURCE = {
+    "name": "ADMETlab 3.0",
+    "url": "https://admetlab3.scbdd.com/",
+}
+READ_ONLY_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_prediction_availability: Dict[str, Any] = {
+    "status": "unknown",
+    "lastChecked": None,
+    "upstreamStatus": None,
+}
 
 
 class RpcError(Exception):
@@ -44,6 +60,28 @@ async def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/readyz")
+async def readiness() -> Dict[str, Any]:
+    prediction = dict(_prediction_availability)
+    return {
+        "status": "degraded" if prediction["status"] == "degraded" else "ok",
+        "prediction": prediction,
+        "otherTools": "available",
+    }
+
+
+def _record_prediction_availability(
+    status: str, *, upstream_status: Optional[int] = None
+) -> None:
+    _prediction_availability.update(
+        {
+            "status": status,
+            "lastChecked": datetime.now(timezone.utc).isoformat(),
+            "upstreamStatus": upstream_status,
+        }
+    )
+
+
 def _tool_registry(settings) -> List[Dict[str, Any]]:
     return [
         {
@@ -56,6 +94,7 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                 },
                 "required": ["SMILES"],
             },
+            "annotations": dict(READ_ONLY_ANNOTATIONS),
         },
         {
             "name": "render_molecule_svg",
@@ -73,10 +112,11 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                 },
                 "required": ["SMILES"],
             },
+            "annotations": dict(READ_ONLY_ANNOTATIONS),
         },
         {
             "name": "predict_admet",
-            "description": "Predict ADMET properties via /api/admet with optional feature/uncertain flags.",
+            "description": "Predict ADMET properties via /api/single/admet, one upstream request per SMILES. The upstream prediction service may be temporarily unavailable.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -85,7 +125,10 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                         "items": {"type": "string"},
                     },
                     "feature": {"type": "boolean"},
-                    "uncertain": {"type": "boolean"},
+                    "uncertain": {
+                        "type": "boolean",
+                        "description": "Deprecated compatibility input. It is ignored because /api/single/admet does not accept it.",
+                    },
                 },
                 "required": ["SMILES"],
             },
@@ -93,6 +136,7 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                 "batch_size": settings.batch_size,
                 "rps_limit": settings.rps_limit,
             },
+            "annotations": dict(READ_ONLY_ANNOTATIONS),
         },
         {
             "name": "fetch_admet_csv",
@@ -102,6 +146,7 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                 "properties": {"taskId": {"type": "string"}},
                 "required": ["taskId"],
             },
+            "annotations": dict(READ_ONLY_ANNOTATIONS),
         },
     ]
 
@@ -112,6 +157,11 @@ async def _handle_initialize(_params: Dict[str, Any]) -> Dict[str, Any]:
         "protocolVersion": "2024-11-05",
         "capabilities": {"tools": {}},
         "serverInfo": {"name": "admetlab-mcp", "version": app.version},
+        "instructions": (
+            "Preserve the ADMETlab source label in answers. If predict_admet "
+            "returns isError=true, explain that the upstream prediction service "
+            "is unavailable rather than presenting a prediction."
+        ),
         "metadata": {
             "rpsLimit": settings.rps_limit,
             "batchSize": settings.batch_size,
@@ -123,13 +173,6 @@ async def _handle_initialize(_params: Dict[str, Any]) -> Dict[str, Any]:
 async def _handle_tools_list() -> Dict[str, Any]:
     settings = get_settings()
     return {"tools": _tool_registry(settings)}
-
-
-def _chunk_smiles(smiles: List[str], batch_size: int) -> List[List[str]]:
-    if not smiles:
-        return []
-    batches = int(math.ceil(len(smiles) / float(batch_size)))
-    return [smiles[i * batch_size : (i + 1) * batch_size] for i in range(batches)]
 
 
 def _rpc_error_payload(
@@ -200,16 +243,29 @@ async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
                 smiles_list = _coerce_smiles(smiles_arg)
                 feature = arguments.get("feature")
                 uncertain = arguments.get("uncertain")
-                batches = _chunk_smiles(smiles_list, settings.batch_size)
+                if len(smiles_list) > settings.batch_size:
+                    raise RpcError(
+                        -32602,
+                        f"Invalid params: at most {settings.batch_size} SMILES values are allowed",
+                    )
                 results: List[Dict[str, Any]] = []
-                for batch in batches:
+                for smiles in smiles_list:
                     resp = await client.predict_admet(
-                        smiles=batch,
+                        smiles=smiles,
                         feature=feature,
-                        uncertain=uncertain,
                     )
                     results.append(resp)
-                return {"batches": results, "batchCount": len(results)}
+                _record_prediction_availability("available", upstream_status=200)
+                response: Dict[str, Any] = {
+                    "batches": results,
+                    "batchCount": len(results),
+                }
+                if uncertain is not None:
+                    response["warnings"] = [
+                        "The uncertain input is deprecated and was ignored because "
+                        "/api/single/admet does not accept it."
+                    ]
+                return response
 
             if name == "fetch_admet_csv":
                 task_id = arguments.get("taskId") or arguments.get("task_id")
@@ -223,7 +279,36 @@ async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
                 }
     except httpx.HTTPError as exc:
         logger.warning("ADMETlab upstream request failed", exc_info=exc)
-        raise RpcError(-32002, "Upstream ADMETlab request failed") from exc
+        upstream_status = (
+            exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        )
+        unavailable = isinstance(exc, httpx.TimeoutException) or upstream_status in {
+            429,
+            500,
+            502,
+            503,
+            504,
+        }
+        if name == "predict_admet" and unavailable:
+            _record_prediction_availability("degraded", upstream_status=upstream_status)
+        error_code = "upstream_unavailable" if unavailable else "upstream_rejected"
+        message = (
+            "ADMETlab prediction service is temporarily unavailable. Molecule "
+            "washing and rendering may still work; retry prediction after the "
+            "upstream service recovers."
+            if unavailable
+            else "ADMETlab rejected the prediction request. Check each SMILES value and retry."
+        )
+        raise RpcError(
+            -32002,
+            message,
+            data={
+                "code": error_code,
+                "upstreamStatus": upstream_status,
+                "retryable": unavailable,
+                "source": dict(ADMETLAB_SOURCE),
+            },
+        ) from exc
     finally:
         if token is not None:
             correlation_id.reset(token)
@@ -238,15 +323,34 @@ async def _handle_tools_call(params: Dict[str, Any]) -> Dict[str, Any]:
         raise RpcError(-32602, "Invalid params: tool name is required")
     if not isinstance(arguments, dict):
         raise RpcError(-32602, "Invalid params: arguments must be an object")
-    result = await _call_tool(name=name, arguments=arguments)
+    try:
+        result = await _call_tool(name=name, arguments=arguments)
+    except RpcError as exc:
+        if exc.code != -32002:
+            raise
+        return {
+            "content": [{"type": "text", "text": exc.message}],
+            "_meta": {
+                "error": exc.data or {"code": "upstream_request_failed"},
+                "sources": [dict(ADMETLAB_SOURCE)],
+            },
+            "isError": True,
+        }
     return {
         "content": [
             {
                 "type": "text",
                 "text": json.dumps(result, ensure_ascii=False, sort_keys=True),
-            }
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"Source: {ADMETLAB_SOURCE['name']} — " f"{ADMETLAB_SOURCE['url']}"
+                ),
+            },
         ],
         "structuredContent": result,
+        "_meta": {"sources": [dict(ADMETLAB_SOURCE)]},
     }
 
 

@@ -14,3 +14,9 @@ def test_fallback_endpoints_accept_json_array_string():
 def test_admet_endpoint_normalizes_leading_slash():
     settings = Settings(admet_endpoint="api/admet")
     assert settings.admet_endpoint == "/api/admet"
+
+
+def test_single_smiles_endpoint_is_the_default():
+    settings = Settings()
+    assert settings.admet_endpoint == "/api/single/admet"
+    assert settings.admet_fallback_endpoints == []
