@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-22
+
+### Changed
+
+- Send one string-valued `SMILES` request per molecule to the live `/api/single/admet` contract.
+- Keep `uncertain` as a deprecated compatibility input while omitting it from upstream requests.
+- Add source labels, read-only MCP annotations, and prediction availability to `/readyz`.
+- Bind local quickstarts to `127.0.0.1` without development reload processes.
+
+### Fixed
+
+- Stop calling the nonexistent `/api/admet` endpoint with a list payload.
+- Return prediction outages and upstream validation failures as actionable MCP tool errors instead of reconnect-triggering JSON-RPC errors.
+- Keep molecule washing and rendering available while prediction readiness is degraded.
+
 ## [0.1.1] - 2026-07-21
 
 ### Added

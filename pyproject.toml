@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "admetlab-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "Model Context Protocol server for ADMETlab 3.0"
 readme = "README.md"
 requires-python = ">=3.10"

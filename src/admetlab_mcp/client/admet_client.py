@@ -44,7 +44,9 @@ class AdmetClient:
                 resp = await self._client.post(path, json=json_body)
                 if resp.status_code in {429, 500, 502, 503, 504}:
                     raise httpx.HTTPStatusError(
-                        f"Upstream error {resp.status_code}", request=resp.request, response=resp
+                        f"Upstream error {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
                     )
                 return resp
             except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
@@ -64,7 +66,9 @@ class AdmetClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def render_molecule_svg(self, smiles: str, figsize: Optional[List[int]] = None) -> Dict[str, Any]:
+    async def render_molecule_svg(
+        self, smiles: str, figsize: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"SMILES": smiles}
         if figsize:
             payload["figsize"] = figsize
@@ -74,25 +78,16 @@ class AdmetClient:
 
     async def predict_admet(
         self,
-        smiles: Iterable[str],
+        smiles: str,
         feature: Optional[bool] = None,
-        uncertain: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {"SMILES": list(smiles)}
-        payload["feature"] = self.settings.feature_default if feature is None else feature
-        payload["uncertain"] = self.settings.uncertain_default if uncertain is None else uncertain
-        endpoints = [self.settings.admet_endpoint, *self.settings.admet_fallback_endpoints]
-        seen: Dict[str, str] = {}
-        for path in endpoints:
-            try:
-                resp = await self._post_json(path, payload)
-                resp.raise_for_status()
-                return resp.json()
-            except httpx.HTTPStatusError as exc:
-                seen[path] = f"{exc.response.status_code} {exc.response.reason_phrase}"
-            except httpx.TimeoutException as exc:
-                seen[path] = f"timeout: {exc}"
-        raise httpx.HTTPError(f"All ADMET endpoints failed: {seen}")
+        payload: Dict[str, Any] = {"SMILES": smiles}
+        payload["feature"] = (
+            self.settings.feature_default if feature is None else feature
+        )
+        resp = await self._post_json(self.settings.admet_endpoint, payload)
+        resp.raise_for_status()
+        return resp.json()
 
     async def fetch_admet_csv(self, task_id: str) -> httpx.Response:
         payload = {"taskId": task_id}

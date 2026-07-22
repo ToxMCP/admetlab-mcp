@@ -14,6 +14,7 @@ Use this checklist before creating a new release.
 - Run formatting checks: `black .` and `isort .`
 - Run a local smoke test:
   - `GET /health`
+  - `GET /readyz`
   - `POST /mcp` `initialize`
   - `POST /mcp` `tools/list`
 

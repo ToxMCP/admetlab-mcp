@@ -17,6 +17,18 @@
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
 
+## What's new in v0.1.2
+
+This reliability patch corrects the live ADMETlab prediction request contract and makes upstream outages visible to MCP clients.
+
+- `predict_admet` sends one string-valued SMILES request to `/api/single/admet` per molecule; the nonexistent `/api/admet` endpoint is no longer called.
+- `uncertain` remains accepted for compatibility but is deprecated, ignored, and never sent upstream.
+- Upstream 5xx/timeouts return `isError: true` with an actionable `upstream_unavailable` result instead of disconnecting the MCP call.
+- `/readyz` reports prediction status as `unknown`, `available`, or `degraded` while molecule washing and rendering remain available.
+- Successful tool results include an explicit ADMETlab source label and read-only annotations.
+
+> **Known upstream limitation (observed 2026-07-22):** ADMETlab's live `/api/single/admet` endpoint currently returns a server-side `BSEP` error even for valid molecules. v0.1.2 fixes this MCP server's request format and reports that outage honestly; it cannot repair ADMETlab's external model service.
+
 ## What's new in v0.1.1
 
 This patch release restores standards-compliant initialization for strict MCP clients, including Claude Desktop through `mcp-remote`.
@@ -37,7 +49,7 @@ ADMETlab 3.0 provides ADMET property calculations, washing, and visualization. R
 | --- | --- |
 | 🌐 **MCP over HTTP** | JSON-RPC `/mcp` endpoint with lifecycle + tool catalog. |
 | 🧪 **ADMET Tools** | Wash molecules, render SVGs, run ADMET predictions, fetch CSV outputs. |
-| 🛡️ **Client-side Guardrails** | Rate limit (<=5 rps), batching (<=1000 SMILES per call), retries/backoff, fallback endpoints for ADMET. |
+| 🛡️ **Client-side Guardrails** | Rate limit (<=5 rps), up to 1000 SMILES per MCP call, per-molecule upstream requests, and retries/backoff. |
 | 📜 **Schema-first** | Pydantic models + JSON Schema surfaced via `tools/list`. |
 | 🔎 **Observability Ready** | Structured JSON logs with correlation IDs; hooks for metrics/audit. |
 
@@ -55,10 +67,11 @@ pip install -e ".[dev]"
 cp .env.example .env
 
 # 3) run
-uvicorn admetlab_mcp.transport.http:app --host 0.0.0.0 --port 8200 --reload
+uvicorn admetlab_mcp.transport.http:app --host 127.0.0.1 --port 8200
 
 # 4) verify
 curl -s http://localhost:8200/health | jq .
+curl -s http://localhost:8200/readyz | jq .
 curl -s http://localhost:8200/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | jq .
@@ -71,13 +84,14 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
-uvicorn admetlab_mcp.transport.http:app --host 0.0.0.0 --port 8200 --reload
+uvicorn admetlab_mcp.transport.http:app --host 127.0.0.1 --port 8200
 ```
 
 MCP HTTP endpoint: `http://localhost:8200/mcp`  
 Health: `http://localhost:8200/health`
+Readiness: `http://localhost:8200/readyz`
 
-> Note: ADMET predictions try `/api/admet` then fall back to `/api/single/admet`. The official site currently reports instability; expect occasional 5xx/404 responses from upstream.
+> Prediction uses the live `/api/single/admet` contract. If ADMETlab is unavailable, `predict_admet` returns a visible tool error and `/readyz` reports `degraded`; this does not prevent `wash_molecule` or `render_molecule_svg` from working.
 
 ---
 
@@ -92,11 +106,11 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | `ADMETLAB_RETRY_ATTEMPTS` | `3` | Retry attempts on 5xx/429. |
 | `ADMETLAB_RETRY_BACKOFF` | `0.5` | Initial backoff seconds (exponential). |
 | `ADMETLAB_RPS_LIMIT` | `5` | Client-side requests per second cap. |
-| `ADMETLAB_BATCH_SIZE` | `1000` | SMILES per request before chunking. |
+| `ADMETLAB_BATCH_SIZE` | `1000` | Maximum SMILES accepted by one MCP call. |
 | `ADMETLAB_FEATURE_DEFAULT` | `false` | Default `feature` flag for ADMET. |
-| `ADMETLAB_UNCERTAIN_DEFAULT` | `false` | Default `uncertain` flag for ADMET. |
-| `ADMETLAB_ADMET_ENDPOINT` | `/api/admet` | Primary ADMET endpoint. |
-| `ADMETLAB_ADMET_FALLBACK_ENDPOINTS` | `/api/single/admet` | Fallback endpoints. Accepts comma-separated paths or JSON array string. |
+| `ADMETLAB_UNCERTAIN_DEFAULT` | `false` | Deprecated compatibility setting; not sent upstream. |
+| `ADMETLAB_ADMET_ENDPOINT` | `/api/single/admet` | Single-SMILES ADMET endpoint. |
+| `ADMETLAB_ADMET_FALLBACK_ENDPOINTS` | _empty_ | Deprecated compatibility setting; automatic fallback is disabled. |
 | `ADMETLAB_API_KEY` | _empty_ | Reserved for future auth. |
 | `ADMETLAB_LOG_LEVEL` | `INFO` | Log level. |
 
@@ -108,7 +122,7 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | --- | --- | --- |
 | `wash_molecule` | `POST /api/washmol` | Standardize molecules; returns cleaned SMILES list. |
 | `render_molecule_svg` | `POST /api/molsvg` | Render molecule SVG; optional `figsize` `[w,h]`. |
-| `predict_admet` | `POST /api/admet` (fallback `/api/single/admet`) | ADMET panel with decision codes, probabilities, SVG highlights; returns batch aggregation and `taskid` from upstream payload. |
+| `predict_admet` | `POST /api/single/admet` | One request per SMILES, aggregated under `batches`; returns a visible MCP error while the upstream predictor is unavailable. |
 | `fetch_admet_csv` | `POST /api/admetCSV` | Fetch CSV results by `taskId`; response includes headers and content. |
 
 Lifecycle: `initialize`, `notifications/initialized`, `shutdown`, and `exit` are exposed via `/mcp`. Tool schemas are discoverable via `tools/list`.
@@ -118,7 +132,7 @@ Lifecycle: `initialize`, `notifications/initialized`, `shutdown`, and `exit` are
 ## Running the server
 
 ```bash
-uvicorn admetlab_mcp.transport.http:app --host 0.0.0.0 --port 8200
+uvicorn admetlab_mcp.transport.http:app --host 127.0.0.1 --port 8200
 ```
 
 Sample MCP calls (HTTP):
@@ -138,6 +152,13 @@ curl -s http://localhost:8200/mcp \
 curl -s http://localhost:8200/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"wash_molecule","arguments":{"SMILES":"CCO"}}}'
+
+# prediction demo: inspect either structuredContent on success or isError/content
+# while the upstream ADMETlab predictor is degraded
+curl -s http://localhost:8200/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"predict_admet","arguments":{"SMILES":"CCO"}}}' \
+  | jq '.result | {isError, content, structuredContent, _meta}'
 ```
 
 ---
@@ -145,6 +166,8 @@ curl -s http://localhost:8200/mcp \
 ## Output artifacts
 
 - Tool results are returned as text content blocks under `result.content` and as machine-readable JSON under `result.structuredContent`.
+- Source descriptors are returned visibly in `content` and programmatically in `result._meta.sources`.
+- Prediction outages are returned as `isError: true` tool results; they are not successful predictions and should be stated as such.
 - CSV fetch includes raw text plus headers for client-side saving.
 - SVGs are returned inline as strings from `render_molecule_svg`.
 
@@ -156,6 +179,7 @@ curl -s http://localhost:8200/mcp \
 - Input validation and batch caps to avoid oversize requests.
 - Optional API key header placeholder for future auth.
 - Prefer running behind TLS-terminating proxy; restrict exposure to trusted clients.
+- Tool annotations are read-only hints. Permission persistence is controlled by the MCP client (for example Claude Desktop), not by this server.
 
 ---
 
@@ -163,7 +187,7 @@ curl -s http://localhost:8200/mcp \
 
 - Tests: `pytest`
 - Lint/format: `black . && isort .`
-- Known upstream issues: ADMET endpoints may return 404/500 due to service instability (per official notice). The client retries and falls back but cannot guarantee success.
+- Known upstream issue: `/api/single/admet` was returning an internal `BSEP` error on 2026-07-22. The server retries transient failures and reports degradation without exposing the upstream traceback.
 
 ---
 
@@ -215,6 +239,7 @@ Once the server is running:
 ```bash
 # health
 curl -s http://localhost:8200/health | jq .
+curl -s http://localhost:8200/readyz | jq .
 
 # list MCP tools
 curl -s http://localhost:8200/mcp \
