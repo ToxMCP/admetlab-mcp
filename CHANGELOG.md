@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-01
+
 ### Fixed
 
 - Reuse the HTTP upstream client for the application lifespan and share a process-wide request-start budget across client instances, concurrent tool calls, and retries.
