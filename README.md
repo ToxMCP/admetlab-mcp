@@ -17,6 +17,11 @@
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
 
+## What's new in v0.1.3
+
+- Share upstream request limits and bounded retry cooldown across concurrent calls; reuse the upstream client for the application lifespan.
+- Align washing and prediction batch limits, retain explicit provider-outage reporting, and ship patched dependency floors with locked CI.
+
 ## What's new in v0.1.2
 
 This reliability patch corrects the live ADMETlab prediction request contract and makes upstream outages visible to MCP clients.

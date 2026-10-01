@@ -38,7 +38,7 @@ def test_initialize_advertises_tools_capability_as_object():
     assert resp.status_code == 200
     result = resp.json()["result"]
     assert result["capabilities"]["tools"] == {}
-    assert result["serverInfo"]["version"] == "0.1.2"
+    assert result["serverInfo"]["version"] == "0.1.3"
     assert "Preserve the ADMETlab source label" in result["instructions"]
 
 
