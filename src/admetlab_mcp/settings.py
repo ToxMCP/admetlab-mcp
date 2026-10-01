@@ -22,14 +22,18 @@ class Settings(BaseSettings):
     timeout_seconds: PositiveInt = Field(
         default=30, description="HTTP request timeout in seconds"
     )
-    retry_attempts: PositiveInt = Field(
-        default=3, description="Retry attempts on 5xx/429"
+    retry_attempts: int = Field(
+        default=3, ge=0, le=10, description="Retry attempts on 5xx/429 (0–10)"
     )
     retry_backoff: float = Field(
-        default=0.5, description="Initial backoff (seconds) for exponential retries"
+        default=0.5,
+        ge=0,
+        le=30,
+        allow_inf_nan=False,
+        description="Initial backoff seconds; each retry delay is capped at 30 seconds",
     )
     rps_limit: PositiveInt = Field(
-        default=5, description="Client-side rate limit (requests per second)"
+        default=5, description="Process-wide upstream rate limit (requests per second)"
     )
     batch_size: PositiveInt = Field(
         default=1000, description="Maximum SMILES accepted by one MCP tool call"

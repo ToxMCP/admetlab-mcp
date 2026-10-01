@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -14,8 +15,21 @@ from ..client.admet_client import AdmetClient
 from ..logging import configure_logging, correlation_id
 from ..settings import get_settings
 
-app = FastAPI(title="ADMETlab 3.0 MCP Server", version=__version__)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_logging()
+    async with AdmetClient() as client:
+        app.state.admet_client = client
+        try:
+            yield
+        finally:
+            del app.state.admet_client
+
+
+app = FastAPI(title="ADMETlab 3.0 MCP Server", version=__version__, lifespan=lifespan)
 
 ADMETLAB_SOURCE = {
     "name": "ADMETlab 3.0",
@@ -48,11 +62,6 @@ class RpcError(Exception):
         self.message = message
         self.data = data
         self.status_code = status_code
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    configure_logging()
 
 
 @app.get("/health")
@@ -90,7 +99,11 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "SMILES": {"type": ["string", "array"], "items": {"type": "string"}}
+                    "SMILES": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "maxItems": settings.batch_size,
+                    }
                 },
                 "required": ["SMILES"],
             },
@@ -123,6 +136,7 @@ def _tool_registry(settings) -> List[Dict[str, Any]]:
                     "SMILES": {
                         "type": ["array", "string"],
                         "items": {"type": "string"},
+                        "maxItems": settings.batch_size,
                     },
                     "feature": {"type": "boolean"},
                     "uncertain": {
@@ -188,7 +202,7 @@ def _rpc_error_payload(
     return {"jsonrpc": "2.0", "id": rpc_id, "error": error}
 
 
-def _coerce_smiles(smiles_arg: Any) -> List[str]:
+def _coerce_smiles(smiles_arg: Any, *, batch_size: int) -> List[str]:
     candidates: List[Any]
     if isinstance(smiles_arg, str):
         candidates = [smiles_arg]
@@ -198,6 +212,11 @@ def _coerce_smiles(smiles_arg: Any) -> List[str]:
         raise RpcError(
             -32602,
             "Invalid params: SMILES must be a string or an array of strings",
+        )
+
+    if len(candidates) > batch_size:
+        raise RpcError(
+            -32602, f"Invalid params: at most {batch_size} SMILES values are allowed"
         )
 
     normalized: List[str] = []
@@ -217,16 +236,20 @@ def _coerce_smiles(smiles_arg: Any) -> List[str]:
     return normalized
 
 
-async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _call_tool(
+    name: str, arguments: Dict[str, Any], *, client: Optional[AdmetClient] = None
+) -> Dict[str, Any]:
     cid = arguments.get("correlationId")
     token = correlation_id.set(cid) if isinstance(cid, str) and cid else None
     settings = get_settings()
 
     try:
-        async with AdmetClient() as client:
+        async with AsyncExitStack() as stack:
+            if client is None:
+                client = await stack.enter_async_context(AdmetClient())
             if name == "wash_molecule":
                 smiles_arg = arguments.get("SMILES", arguments.get("smiles"))
-                smiles = _coerce_smiles(smiles_arg)
+                smiles = _coerce_smiles(smiles_arg, batch_size=settings.batch_size)
                 return await client.wash_molecule(smiles)
 
             if name == "render_molecule_svg":
@@ -240,14 +263,9 @@ async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
 
             if name == "predict_admet":
                 smiles_arg = arguments.get("SMILES", arguments.get("smiles"))
-                smiles_list = _coerce_smiles(smiles_arg)
+                smiles_list = _coerce_smiles(smiles_arg, batch_size=settings.batch_size)
                 feature = arguments.get("feature")
                 uncertain = arguments.get("uncertain")
-                if len(smiles_list) > settings.batch_size:
-                    raise RpcError(
-                        -32602,
-                        f"Invalid params: at most {settings.batch_size} SMILES values are allowed",
-                    )
                 results: List[Dict[str, Any]] = []
                 for smiles in smiles_list:
                     resp = await client.predict_admet(
@@ -316,7 +334,9 @@ async def _call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     raise RpcError(-32601, f"Method not found: unknown tool {name}")
 
 
-async def _handle_tools_call(params: Dict[str, Any]) -> Dict[str, Any]:
+async def _handle_tools_call(
+    params: Dict[str, Any], *, client: Optional[AdmetClient] = None
+) -> Dict[str, Any]:
     name = params.get("name")
     arguments = params.get("arguments", {}) or {}
     if not isinstance(name, str) or not name:
@@ -324,7 +344,7 @@ async def _handle_tools_call(params: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(arguments, dict):
         raise RpcError(-32602, "Invalid params: arguments must be an object")
     try:
-        result = await _call_tool(name=name, arguments=arguments)
+        result = await _call_tool(name=name, arguments=arguments, client=client)
     except RpcError as exc:
         if exc.code != -32002:
             raise
@@ -362,7 +382,9 @@ async def _handle_shutdown() -> Dict[str, str]:
     return {"status": "shutting_down"}
 
 
-async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
+async def _dispatch(
+    method: str, params: Dict[str, Any], *, client: Optional[AdmetClient] = None
+) -> Any:
     if method == "initialize":
         return await _handle_initialize(params)
     if method in {"notifications/initialized", "initialized"}:
@@ -374,7 +396,7 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
     if method in {"tools/list", "tools.list"}:
         return await _handle_tools_list()
     if method in {"tools/call", "tools.call"}:
-        return await _handle_tools_call(params)
+        return await _handle_tools_call(params, client=client)
     raise RpcError(-32601, f"Method not found: {method}")
 
 
@@ -407,7 +429,9 @@ async def mcp_endpoint(request: Request) -> Response:
         if not isinstance(params, dict):
             raise RpcError(-32602, "Invalid params: params must be an object")
 
-        result = await _dispatch(method, params)
+        result = await _dispatch(
+            method, params, client=getattr(request.app.state, "admet_client", None)
+        )
         if is_notification:
             return Response(status_code=202)
         return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "result": result})

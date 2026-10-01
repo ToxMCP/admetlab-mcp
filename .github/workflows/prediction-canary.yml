@@ -1,0 +1,37 @@
+name: Technical prediction canary
+
+# One synthetic ethanol request, once weekly or manually. No PR/push live calls.
+on:
+  schedule:
+    - cron: "43 5 * * 4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: technical-prediction-canary
+  cancel-in-progress: true
+
+jobs:
+  prediction-endpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked runtime
+        run: uv sync --locked --no-dev
+      - name: One bounded technical prediction check
+        # The script fixes retries=0, rps=1, no API key and a 20-second total timeout.
+        run: uv run --no-sync python -m admetlab_mcp.canary | tee prediction-canary.json
+      - name: Save technical status only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: technical-prediction-status
+          path: prediction-canary.json
+          if-no-files-found: ignore
