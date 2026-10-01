@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Apply the same submitted-array SMILES cap to washing and prediction, and expose it in both input schemas.
 - Require patched AnyIO and Pydantic Settings versions in package metadata, refresh the targeted lock entries, and reconcile the lock's stale local-project version.
 - Run CI against the checked lockfile rather than an independent latest-dependency resolution.
+- Honor bounded `Retry-After` on 429/503 with a process-wide cooldown that also covers exhausted retries; cap backoff at 30 seconds and validate finite retry configuration.
+
+### Added
+
+- Weekly/manual technical prediction canary: one bounded ethanol request, zero retries, no credentials or provider-body output, with explicit rate-limit/outage status and no scientific qualification claim.
 
 ## [0.1.2] - 2026-07-22
 

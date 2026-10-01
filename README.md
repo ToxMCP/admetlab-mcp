@@ -103,8 +103,8 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | --- | --- | --- |
 | `ADMETLAB_BASE_URL` | `https://admetlab3.scbdd.com` | Base URL for all requests. |
 | `ADMETLAB_TIMEOUT_SECONDS` | `30` | HTTP timeout. |
-| `ADMETLAB_RETRY_ATTEMPTS` | `3` | Retry attempts on 5xx/429. |
-| `ADMETLAB_RETRY_BACKOFF` | `0.5` | Initial backoff seconds (exponential). |
+| `ADMETLAB_RETRY_ATTEMPTS` | `3` | Retry attempts on 5xx/429 (0–10; zero disables retries). |
+| `ADMETLAB_RETRY_BACKOFF` | `0.5` | Finite initial backoff seconds (0–30); exponential retry delays are capped at 30 seconds. |
 | `ADMETLAB_RPS_LIMIT` | `5` | Shared requests per second cap for all clients and retries in one server process. |
 | `ADMETLAB_BATCH_SIZE` | `1000` | Maximum SMILES accepted by one MCP call. |
 | `ADMETLAB_FEATURE_DEFAULT` | `false` | Default `feature` flag for ADMET. |
@@ -176,6 +176,7 @@ curl -s http://localhost:8200/mcp \
 ## Security checklist
 
 - All HTTP tool calls share a lifespan-owned upstream client, and all client instances/retries share the process-wide rate limiter (default `5 rps`). Run one worker, or apportion the upstream budget through an external shared limiter when running multiple processes/replicas.
+- A `429` or `503` response imposes a shared process cooldown, using the larger of exponential backoff and a valid `Retry-After` delay (seconds or HTTP date), capped at 30 seconds. This applies even when the caller has no retries left. Invalid headers fall back to backoff; shorter cooldowns cannot release earlier waiters.
 - Washing and prediction enforce `ADMETLAB_BATCH_SIZE` on the submitted SMILES array before normalization; their advertised schemas carry the same maximum.
 - Input validation and batch caps to avoid oversize requests.
 - Optional API key header placeholder for future auth.
@@ -185,6 +186,8 @@ curl -s http://localhost:8200/mcp \
 ---
 
 ## Development notes
+
+- The **Technical prediction canary** workflow runs weekly on Thursday at 05:43 UTC or on manual dispatch, with no push/PR live calls. It sends one synthetic ethanol (`CCO`) request to `/api/single/admet`, with `feature=false`, zero retries, 1 rps, no API key, a 15-second HTTP timeout and a 20-second total request deadline. `python -m admetlab_mcp.canary` runs the same live check manually. Output contains technical HTTP/JSON status only; `429` is clearly reported as `provider_rate_limited` and fails the check. It does not assess prediction accuracy, scientific qualification, or readiness for regulatory use, and does not print provider response bodies.
 
 - Reproducible environment: `uv sync --locked --extra dev`, then `uv run --no-sync pytest`. CI and the existing weekly dependency audit use the same lockfile.
 - Tests: `pytest`
