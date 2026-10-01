@@ -105,7 +105,7 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | `ADMETLAB_TIMEOUT_SECONDS` | `30` | HTTP timeout. |
 | `ADMETLAB_RETRY_ATTEMPTS` | `3` | Retry attempts on 5xx/429. |
 | `ADMETLAB_RETRY_BACKOFF` | `0.5` | Initial backoff seconds (exponential). |
-| `ADMETLAB_RPS_LIMIT` | `5` | Client-side requests per second cap. |
+| `ADMETLAB_RPS_LIMIT` | `5` | Shared requests per second cap for all clients and retries in one server process. |
 | `ADMETLAB_BATCH_SIZE` | `1000` | Maximum SMILES accepted by one MCP call. |
 | `ADMETLAB_FEATURE_DEFAULT` | `false` | Default `feature` flag for ADMET. |
 | `ADMETLAB_UNCERTAIN_DEFAULT` | `false` | Deprecated compatibility setting; not sent upstream. |
@@ -175,7 +175,8 @@ curl -s http://localhost:8200/mcp \
 
 ## Security checklist
 
-- Client-side rate limiting honors service guidance (`<=5 rps`).
+- All HTTP tool calls share a lifespan-owned upstream client, and all client instances/retries share the process-wide rate limiter (default `5 rps`). Run one worker, or apportion the upstream budget through an external shared limiter when running multiple processes/replicas.
+- Washing and prediction enforce `ADMETLAB_BATCH_SIZE` on the submitted SMILES array before normalization; their advertised schemas carry the same maximum.
 - Input validation and batch caps to avoid oversize requests.
 - Optional API key header placeholder for future auth.
 - Prefer running behind TLS-terminating proxy; restrict exposure to trusted clients.
@@ -185,6 +186,7 @@ curl -s http://localhost:8200/mcp \
 
 ## Development notes
 
+- Reproducible environment: `uv sync --locked --extra dev`, then `uv run --no-sync pytest`. CI and the existing weekly dependency audit use the same lockfile.
 - Tests: `pytest`
 - Lint/format: `black . && isort .`
 - Known upstream issue: `/api/single/admet` was returning an internal `BSEP` error on 2026-07-22. The server retries transient failures and reports degradation without exposing the upstream traceback.

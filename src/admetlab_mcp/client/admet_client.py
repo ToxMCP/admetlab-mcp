@@ -2,11 +2,34 @@ from __future__ import annotations
 
 import asyncio
 import time
+from threading import Lock
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
 
 from ..settings import get_settings
+
+
+class UpstreamRateLimiter:
+    """Space request starts across clients and event loops within one process."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._next_request_ts = 0.0
+
+    async def acquire(self, rps_limit: int) -> None:
+        while True:
+            # Hold a synchronous lock only for the timestamp update, never while waiting.
+            with self._lock:
+                now = time.monotonic()
+                delay = self._next_request_ts - now
+                if delay <= 0:
+                    self._next_request_ts = now + 1.0 / rps_limit
+                    return
+            await asyncio.sleep(delay)
+
+
+_PROCESS_RATE_LIMITER = UpstreamRateLimiter()
 
 
 class AdmetClient:
@@ -17,8 +40,7 @@ class AdmetClient:
             timeout=self.settings.timeout_seconds,
             headers=self._default_headers(),
         )
-        self._lock = asyncio.Lock()
-        self._last_request_ts = 0.0
+        self._rate_limiter = _PROCESS_RATE_LIMITER
 
     def _default_headers(self) -> Dict[str, str]:
         headers: Dict[str, str] = {"Content-Type": "application/json"}
@@ -27,13 +49,7 @@ class AdmetClient:
         return headers
 
     async def _throttle(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
-            min_interval = 1.0 / float(self.settings.rps_limit)
-            elapsed = now - self._last_request_ts
-            if elapsed < min_interval:
-                await asyncio.sleep(min_interval - elapsed)
-            self._last_request_ts = time.monotonic()
+        await self._rate_limiter.acquire(self.settings.rps_limit)
 
     async def _post_json(self, path: str, json_body: Dict[str, Any]) -> httpx.Response:
         attempt = 0

@@ -41,8 +41,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Sync dependencies (runtime + dev, frozen to uv.lock)
-        run: uv sync --extra dev --frozen
+      - name: Sync dependencies (runtime + dev, checked against uv.lock)
+        run: uv sync --extra dev --locked
 
       # Export the fully resolved, pinned, hashed dependency set (runtime + dev)
       # WITHOUT the local editable project. pip-audit's --strict cannot audit an
@@ -51,7 +51,7 @@ jobs:
       # uv.lock pins.
       - name: Export locked dependency set
         run: |
-          uv export --frozen --extra dev --no-emit-project \
+          uv export --locked --extra dev --no-emit-project \
             --format requirements-txt > /tmp/dep-audit-requirements.txt
           echo "Audited dependency set:"
           grep -E '^[A-Za-z0-9._-]+==' /tmp/dep-audit-requirements.txt | sort

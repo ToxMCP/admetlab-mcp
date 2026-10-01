@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         default=0.5, description="Initial backoff (seconds) for exponential retries"
     )
     rps_limit: PositiveInt = Field(
-        default=5, description="Client-side rate limit (requests per second)"
+        default=5, description="Process-wide upstream rate limit (requests per second)"
     )
     batch_size: PositiveInt = Field(
         default=1000, description="Maximum SMILES accepted by one MCP tool call"
