@@ -1,0 +1,75 @@
+{
+  "syntheticUpstreamFixtures": true,
+  "calls": [
+    {
+      "label": "wash-single",
+      "name": "wash_molecule",
+      "arguments": {
+        "SMILES": " CCO "
+      }
+    },
+    {
+      "label": "wash-batch",
+      "name": "wash_molecule",
+      "arguments": {
+        "SMILES": [
+          "CCO",
+          "CCN"
+        ]
+      }
+    },
+    {
+      "label": "render",
+      "name": "render_molecule_svg",
+      "arguments": {
+        "SMILES": "CCO",
+        "figsize": [
+          240,
+          240
+        ]
+      }
+    },
+    {
+      "label": "predict-default",
+      "name": "predict_admet",
+      "arguments": {
+        "SMILES": "CCO"
+      }
+    },
+    {
+      "label": "predict-batch-deprecated",
+      "name": "predict_admet",
+      "arguments": {
+        "SMILES": [
+          "CCN",
+          "CCC"
+        ],
+        "feature": true,
+        "uncertain": true
+      }
+    },
+    {
+      "label": "fetch-csv",
+      "name": "fetch_admet_csv",
+      "arguments": {
+        "taskId": "fixture-CCO"
+      }
+    },
+    {
+      "label": "provider-unavailable",
+      "name": "predict_admet",
+      "arguments": {
+        "SMILES": "fixture-unavailable"
+      },
+      "isError": true
+    },
+    {
+      "label": "provider-rejected",
+      "name": "predict_admet",
+      "arguments": {
+        "SMILES": "fixture-rejected"
+      },
+      "isError": true
+    }
+  ]
+}

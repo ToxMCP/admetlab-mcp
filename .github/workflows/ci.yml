@@ -30,3 +30,34 @@ jobs:
 
       - name: Run tests
         run: uv run --no-sync pytest
+
+  installed-wheel:
+    name: Installed real clients (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v7
+      - name: Build wheel from the source distribution
+        run: uv build
+      - name: Install frozen runtime and wheel outside checkout
+        run: |
+          uv export --locked --no-dev --no-emit-project --output-file "$RUNNER_TEMP/admet-runtime.txt"
+          uv venv "$RUNNER_TEMP/admet-wheel"
+          uv pip install --python "$RUNNER_TEMP/admet-wheel/bin/python" --require-hashes -r "$RUNNER_TEMP/admet-runtime.txt"
+          uv pip install --python "$RUNNER_TEMP/admet-wheel/bin/python" --no-deps dist/*.whl
+      - name: Install isolated locked legacy client
+        run: uv sync --locked --project tests/compatibility/legacy-client
+      - name: Verify all four installed real-client combinations
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/admet-wheel/bin/python" -I "$GITHUB_WORKSPACE/scripts/verify_protocol_clients.py" \
+            --server-python "$RUNNER_TEMP/admet-wheel/bin/python" \
+            --legacy-python "$GITHUB_WORKSPACE/tests/compatibility/legacy-client/.venv/bin/python" \
+            --output-dir "$RUNNER_TEMP/admet-client-results"

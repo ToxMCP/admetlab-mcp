@@ -17,6 +17,12 @@
 **Public MCP endpoint for the ADMETlab 3.0 API.**  
 Expose molecule washing, SVG rendering, ADMET prediction, and CSV retrieval to any MCP-aware agent (Codex CLI, Gemini CLI, Claude Code, etc.).
 
+## SDK2 migration candidate (0.2.0)
+
+The published version remains 0.1.3. This branch adds stable MCP SDK 2.2.0 / protocol 2026-07-28 over the same `/mcp` URL and optional `admetlab-mcp-stdio`. Existing custom legacy handshakes and `tools.list` / `tools.call` aliases remain supported. Python 3.10 remains supported; Uvicorn is updated to meet the SDK's minimum requirement.
+
+The four tool contracts, upstream request format, batching, process-wide rate limits, bounded retry cooldown, source labels and explicit prediction-outage results are retained. Set `ADMETLAB_ALLOWED_HOSTS` and `ADMETLAB_ALLOWED_ORIGINS` for modern clients behind a public gateway. See [migration notes](docs/mcp-sdk2-migration.md).
+
 ## What's new in v0.1.3
 
 - Share upstream request limits and bounded retry cooldown across concurrent calls; reuse the upstream client for the application lifespan.
@@ -117,6 +123,9 @@ Settings use `pydantic-settings` with `.env` support (prefix `ADMETLAB_`):
 | `ADMETLAB_ADMET_ENDPOINT` | `/api/single/admet` | Single-SMILES ADMET endpoint. |
 | `ADMETLAB_ADMET_FALLBACK_ENDPOINTS` | _empty_ | Deprecated compatibility setting; automatic fallback is disabled. |
 | `ADMETLAB_API_KEY` | _empty_ | Reserved for future auth. |
+| `ADMETLAB_ALLOWED_HOSTS` | Loopback hosts with any port | Comma-separated modern HTTP Host allowlist, e.g. `admet.example.org`. |
+| `ADMETLAB_ALLOWED_ORIGINS` | HTTP loopback origins with any port | Comma-separated modern browser Origin allowlist. |
+| `ADMETLAB_MAX_REQUEST_BYTES` | `1000000` | Maximum complete MCP request body for both handlers; raise explicitly for larger batches. |
 | `ADMETLAB_LOG_LEVEL` | `INFO` | Log level. |
 
 ---

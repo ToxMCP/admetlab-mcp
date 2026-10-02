@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from contextvars import ContextVar
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TextIO
 
 from .settings import get_settings
 
@@ -26,9 +26,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
-def configure_logging() -> None:
+def configure_logging(*, stream: Optional[TextIO] = None) -> None:
     settings = get_settings()
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(stream if stream is not None else sys.stdout)
     handler.setFormatter(JsonFormatter())
     root = logging.getLogger()
     root.setLevel(settings.log_level.upper())
