@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — 0.2.0 candidate
+
+- Add stable MCP SDK 2.2.0 and modern 2026-07-28 HTTP dispatch while retaining the released custom legacy handler and aliases.
+- Add optional stdio with both protocol generations and stderr-only logging.
+- Retain the four tool input contracts, upstream batching/rate limits, source labels and visible provider-outage errors. Modern catalog metadata carries existing batch/rate information under `org.toxmcp/toolMetadata`.
+- Add explicit modern Host/Origin allowlists and a configurable complete request-body bound before either parser.
+- Update Uvicorn to meet SDK2 requirements while keeping Python 3.10 support; add installed-wheel real-client compatibility gates.
+
 
 ## [0.1.3] - 2026-10-01
 

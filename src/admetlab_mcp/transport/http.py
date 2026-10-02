@@ -23,13 +23,23 @@ async def lifespan(app: FastAPI):
     configure_logging()
     async with AdmetClient() as client:
         app.state.admet_client = client
+        from .sdk2 import create_sdk_http_app
+
+        sdk_app = create_sdk_http_app(client)
+        app.state.sdk2_app = sdk_app
         try:
-            yield
+            async with sdk_app.router.lifespan_context(sdk_app):
+                yield
         finally:
+            del app.state.sdk2_app
             del app.state.admet_client
 
 
 app = FastAPI(title="ADMETlab 3.0 MCP Server", version=__version__, lifespan=lifespan)
+
+from .body_limit import MCPBodyLimitMiddleware
+
+app.add_middleware(MCPBodyLimitMiddleware, max_bytes=get_settings().max_request_bytes)
 
 ADMETLAB_SOURCE = {
     "name": "ADMETlab 3.0",
@@ -415,6 +425,11 @@ async def mcp_endpoint(request: Request) -> Response:
             _rpc_error_payload(rpc_id=None, code=-32600, message="Invalid Request"),
             status_code=400,
         )
+
+    from .sdk2 import SDKResponse, is_modern_request
+
+    if is_modern_request(request, payload):
+        return SDKResponse(request.app.state.sdk2_app, await request.body())
 
     is_notification = "id" not in payload
     rpc_id = payload.get("id")

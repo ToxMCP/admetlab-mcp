@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import AnyHttpUrl, Field, PositiveInt, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -14,6 +14,17 @@ class Settings(BaseSettings):
         env_file=(".env", ".env.local"),
         extra="ignore",
     )
+
+    allowed_hosts: Annotated[list[str], NoDecode] = []
+    allowed_origins: Annotated[list[str], NoDecode] = []
+    max_request_bytes: PositiveInt = 1_000_000
+
+    @field_validator("allowed_hosts", "allowed_origins", mode="before")
+    @classmethod
+    def _split_transport_allowlist(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
 
     base_url: AnyHttpUrl = Field(
         default="https://admetlab3.scbdd.com",
